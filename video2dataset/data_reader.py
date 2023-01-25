@@ -5,6 +5,10 @@ import requests
 import yt_dlp
 
 
+class DownloadError(BaseException):
+    pass
+
+
 def handle_youtube(youtube_url, tmp_dir, video_height, video_width):
     """returns file and destination name from youtube url."""
     path = f"{tmp_dir}/{str(uuid.uuid4())}.mp4"
@@ -19,7 +23,7 @@ def handle_youtube(youtube_url, tmp_dir, video_height, video_width):
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download(youtube_url)
-    return path, None
+    return path
 
 
 def handle_mp4_link(mp4_link, tmp_dir, dl_timeout):
@@ -27,7 +31,7 @@ def handle_mp4_link(mp4_link, tmp_dir, dl_timeout):
     path = f"{tmp_dir}/{str(uuid.uuid4())}.mp4"
     with open(path, "wb") as f:
         f.write(resp.content)
-    return path, None
+    return path
 
 
 def handle_url(url, dl_timeout, format_args, tmp_dir):
@@ -41,16 +45,13 @@ def handle_url(url, dl_timeout, format_args, tmp_dir):
         name - fname to save frames to.
     """
     if "youtube" in url:  # youtube link
-        try:
-            file, error_message = handle_youtube(url, tmp_dir, **format_args)
-        except Exception as e:  # pylint: disable=(broad-except)
-            file, error_message = None, str(e)
+        file = handle_youtube(url, tmp_dir, **format_args)
     # TODO: add .avi, .webm, should also work
     elif url.endswith(".mp4"):  # mp4 link
-        file, error_message = handle_mp4_link(url, tmp_dir, dl_timeout)
+        file = handle_mp4_link(url, tmp_dir, dl_timeout)
     else:
-        file, error_message = None, "Warning: Incorrect URL type"
-    return file, error_message
+        raise DownloadError("Warning: Incorrect URL type")
+    return file
 
 
 class VideoDataReader:
@@ -66,13 +67,10 @@ class VideoDataReader:
 
     def __call__(self, row):
         key, url = row
-        file_path, error_message = handle_url(url, self.dl_timeout, self.format_args, self.tmp_dir)
-        if error_message is None:
-            with open(file_path, "rb") as vid_file:
-                vid_bytes = vid_file.read()
-        else:
-            vid_bytes = None
+        file_path = handle_url(url, self.dl_timeout, self.format_args, self.tmp_dir)
+        with open(file_path, "rb") as vid_file:
+            vid_bytes = vid_file.read()
 
         if file_path is not None:  # manually remove tempfile
             os.remove(file_path)
-        return key, vid_bytes, error_message
+        return key, vid_bytes
