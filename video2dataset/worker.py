@@ -126,7 +126,7 @@ class Worker:
             def wrap_error(x):
                 try:
                     return self.data_reader(x) + (None,)
-                except Exception as e:
+                except Exception as e:  # pylint: disable=(broad-except)
                     print(e)
                     return (x[0], None, str(e))
 
